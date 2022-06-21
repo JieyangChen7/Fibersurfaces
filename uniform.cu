@@ -224,7 +224,6 @@ __device__ uint8_t follow_poly(uint8_t start_id, double2 intersectionPoint_list[
                                uint8_t intersectionPoint_count_poly[nPoint],
                                uint8_t intersectionPoint_id_poly[nPoint][nPoint],
                                double2 output[nPoint*2+(nPoint)*(nPoint)], int& write_idx, bool debug) {
-  int index = blockIdx.x * blockDim.x + threadIdx.x;
 
   bool start_record = false;
   // record intersection start_id
@@ -445,43 +444,54 @@ __global__ void gpu_kernel(size_t nPts, double* var1, double* var2,
                                 make_double2(5.54, 28.76663592),
                                 make_double2(5.09007307, 28.76663592)};
 
-  int index0 = blockIdx.x * blockDim.x + threadIdx.x;
-  for (int index = index0; index < nPts; index += blockDim.x * gridDim.x) {
-    double v1[nMembers], v2[nMembers];
-    double min_v1 = var1[index];
-    double max_v1 = var1[index];
-    double min_v2 = var2[index];
-    double max_v2 = var2[index];
-    for(int m = 0; m < nMembers; m++) {
+  __shared__ double v1[nMembers], v2[nMembers];
+  __shared__ double hist_v1[nBins], hist_v2[nBins];
+  __shared__ double intercepts_v1[nBins+1], intercepts_v2[nBins+1];
+
+  int index0 = blockIdx.x;
+  for (int index = index0; index < nPts; index += gridDim.x) {
+    for(int m = threadIdx.x; m < nMembers; m += blockDim.x) { 
+    // for(int m = 0; m < nMembers; m++) {
       v1[m] = var1[(m*nPts)+index];
       v2[m] = var2[(m*nPts)+index];
-      if(var1[(m*nPts)+index] < min_v1) {
-        min_v1 = var1[(m*nPts)+index];
+    }
+    __syncthreads();
+
+    double min_v1 = v1[0];
+    double max_v1 = v1[0];
+    double min_v2 = v2[0];
+    double max_v2 = v2[0];
+
+    // This could be improved by using register shuffle instructions
+    for(int m = 1; m < nMembers; m++) {
+      if(v1[m] < min_v1) {
+        min_v1 = v1[m];
       }
-      if(var1[(m*nPts)+index] > max_v1) {
-        max_v1 = var1[(m*nPts)+index];
+      if(v1[m] > max_v1) {
+        max_v1 = v1[m];
       }
-      if(var2[(m*nPts)+index] < min_v2) {
-        min_v2 = var2[(m*nPts)+index];
+      if(v2[m] < min_v2) {
+        min_v2 = v2[m];
       }
-      if(var2[(m*nPts)+index] > max_v2) {
-        max_v2 = var2[(m*nPts)+index];
+      if(v2[m] > max_v2) {
+        max_v2 = v2[m];
       }
     } 
     double band_v1 = (max_v1 - min_v1) / nBins*1.0;
     double band_v2 = (max_v2 - min_v2) / nBins*1.0;
 
-    //if (index < 10) printf("band_v1: %f, band_v2: %f\n", band_v1, band_v2);
+    
 
-    double hist_v1[nBins], hist_v2[nBins];
-    double intercepts_v1[nBins+1], intercepts_v2[nBins+1];
-
-    for(int h = 0; h < nBins+1; h++) { 
+    for(int h = threadIdx.x; h < nBins+1; h += blockDim.x) { 
+    // for(int h = 0; h < nBins+1; h++) { 
       intercepts_v1[h] = min_v1 + h*band_v1;
       intercepts_v2[h] = min_v2 + h*band_v2;
     }
+
+    __syncthreads();
     
-    for(int h = 0; h < nBins; h++) {
+    // for(int h = 0; h < nBins; h++) {
+    for(int h = threadIdx.x; h < nBins; h += blockDim.x) { 
       hist_v1[h] = 0;
       hist_v2[h] = 0;
       for(int m = 0; m < nMembers; m++) {
@@ -494,7 +504,6 @@ __global__ void gpu_kernel(size_t nPts, double* var1, double* var2,
       }
       hist_v1[h] = hist_v1[h]/(nMembers*1.0);
       hist_v2[h] = hist_v2[h]/(nMembers*1.0);
-      // if (index < 10) printf("hist_v1[%d]: %f, hist_v2[%d]: %f\n", h, hist_v1[h], h, hist_v2[h]);
     }
 
     double xlow = minVar1[index];
@@ -508,22 +517,16 @@ __global__ void gpu_kernel(size_t nPts, double* var1, double* var2,
                                 make_double2(xhigh, ylow),
                                 make_double2(xlow, ylow)};
 
-    // if (index < 10) printf("test_poly: (%f %f), (%f %f), (%f %f), (%f %f), (%f %f)\n",
-    //                                     xlow, ylow, xlow, yhigh, xhigh, yhigh, xhigh, ylow, xlow, ylow);
-
     double insideProb = 0.0;
     double outsideProb = 0.0;
 
-    
+    __syncthreads();
     
     if(test_intersect<nPoint>(test_poly, fsCP)) {
-      // if(index == 186394) printf("index %d test_intersect true\n", index);
-
-      for(int l = 0; l < nBins; l++) {
-        for(int m = 0; m < nBins; m++) { 
+        for (int l = 0; l < nBins; l++) {
+          for (int m = threadIdx.x; m < nBins; m+= blockDim.x) { 
 
           bool debug = false;
-          // if (l == 1 && m == 0 && index == 186467) debug = false;
 
           double v1low = intercepts_v1[l];
           double v1high = intercepts_v1[l+1];
@@ -538,8 +541,6 @@ __global__ void gpu_kernel(size_t nPts, double* var1, double* var2,
 
           // if (debug) printf("inside_poly: (%f %f), (%f %f), (%f %f), (%f %f), (%f %f)\n",
           //                               v1low, v2low, v1low, v2high, v1high, v2high, v1high, v2low, v1low, v2low);
-
-          // if (l == 3 && m == 0 && index == 186394) printf("%d %d inside: %d\n", l, m, is_inside<nPoint>(fsCP, inside_poly));
           if(test_intersect<nPoint>(inside_poly, fsCP)) { 
             // if (debug) printf("%d %d inside_poly test_intersect true\n", l, m);
             uint8_t nPointOverlap[(nPoint)*(nPoint)/2];
@@ -547,20 +548,12 @@ __global__ void gpu_kernel(size_t nPts, double* var1, double* var2,
             uint8_t npolyOverlap = 0;
             
             npolyOverlap = find_intersection<nPoint>(inside_poly, fsCP, nPointOverlap, overlap, debug);
-            // intersection += 1;
             double area_poly = calc_area(nPoint, inside_poly);
             // if (debug) printf("inside_poly area: %f\n", area_poly);
             int offset = 0;
             for (int i = 0; i < npolyOverlap; i++)
             {
                double intersectionArea = calc_area(nPointOverlap[i], overlap+offset);
-               // if (l == 3 && m == 0 && index == 182501) {
-               //  printf("overlap (%d): ", nPointOverlap[i]);
-               //  for (int p = 0; p < nPointOverlap[i]; p++) {
-               //    printf("(%f %f), ", (*(overlap+offset+p)).x, (*(overlap+offset+p)).y);
-               //  }
-               //  printf("\n");
-               // }
                // if (debug) printf("%d %d overlap area: %f %f\n", l, m, intersectionArea, area_poly);
                insideProb = insideProb + ((intersectionArea/area_poly)*hist_v1[l]*hist_v2[m]); 
                offset += nPointOverlap[i];
@@ -569,11 +562,11 @@ __global__ void gpu_kernel(size_t nPts, double* var1, double* var2,
         }
       }
     }
-
+    
+    // Multiple thread may write to the same inP, so we need atomic
+    atomicAdd(&inP[index], insideProb);
     outsideProb = 1.0 - insideProb;
-    inP[index] = insideProb; 
-    outP[index] = outsideProb; 
-    // if(index == 186394) printf("inP[%d]: %f, outP[%d]: %f\n", index, inP[index], index, outP[index]);
+    // outP[index] = outsideProb; // seems we are not using outP
   }
 }
 
@@ -606,8 +599,9 @@ void launch_gpu_kernel(int nPts, double* var1, double* var2, double* minVar1,
   gpuErrchk(cudaDeviceSynchronize());
 
   
-  int blockSize = 256;
-  int numBlock = (nPts - 1) / blockSize + 1;
+  int blockSize = nBins;
+  int numBlock = nPts;
+
   auto start_c = std::chrono::high_resolution_clock::now();
   gpu_kernel<nMembers, nBins><<<numBlock, blockSize>>>(nPts, var1_d, var2_d, minVar1_d, maxVar1_d, minVar2_d, maxVar2_d, inP_d, outP_d);
   gpuErrchk(cudaDeviceSynchronize());
