@@ -1,11 +1,11 @@
-project(ufibersurfaces)
+project(ufibersurfaces LANGUAGES CXX CUDA)
 
 cmake_minimum_required(VERSION 2.8.10)
 
 set(CMAKE_CXX_FLAGS "-g -Ofast -fopenmp")
 set(CMAKE_CXX_STANDARD 14)
 
-set(VTK_DIR "/home/ssane/Downloads/VTK-install/lib/cmake/vtk-8.2")
+#set(VTK_DIR "/home/ssane/Downloads/VTK-install/lib/cmake/vtk-8.2")
 find_package(VTK REQUIRED)
 if(VTK_FOUND)
  add_definitions("-DUSE_VTK")
@@ -15,7 +15,7 @@ if(VTK_FOUND)
 #include(${VTK_USE_FILE})
 endif()
 
-find_package(Boost 1.71.0)
+find_package(Boost)
 if(Boost_FOUND)
   include_directories(${Boost_INCLUDE_DIRS})
   add_executable(uniform_fs uniform.cxx)
@@ -25,3 +25,5 @@ if(Boost_FOUND)
 else()
 message("Boost not found")
 endif()
+
+add_executable(uniform_gpu uniform.cu)

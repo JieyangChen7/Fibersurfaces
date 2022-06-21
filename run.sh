@@ -1,10 +1,11 @@
 NTHREADS="1"
-PATH="/home/ssane/Downloads/vtiData/"
+PATH="./vtiData/"
 FILENAME1="f1Ensemble"
 FILENAME2="f2Ensemble"
 NFILES="40"
 NBINS="22"
 
-#time ./uniform_fs $PATH $FILENAME1 $FILENAME2 $NFILES $NBINS $NTHREADS
-time ./gaussian_fs $PATH $FILENAME1 $FILENAME2 $NFILES $NTHREADS
+time ./build/uniform_fs $PATH $FILENAME1 $FILENAME2 $NFILES $NBINS $NTHREADS #> cpu.out
+time ./build/uniform_gpu $PATH $FILENAME1 $FILENAME2 $NFILES $NBINS $NTHREADS #> gpu.out
+#time ./gaussian_fs $PATH $FILENAME1 $FILENAME2 $NFILES $NTHREADS
 
