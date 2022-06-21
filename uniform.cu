@@ -793,6 +793,8 @@ int main(int argc, char* argv[])
   launch_gpu_kernel<20, nMembers>(nPts, var1, var2, minVar1, maxVar1, minVar2, maxVar2, diff_arr, gtFS);
   launch_gpu_kernel<25, nMembers>(nPts, var1, var2, minVar1, maxVar1, minVar2, maxVar2, diff_arr, gtFS);
   launch_gpu_kernel<30, nMembers>(nPts, var1, var2, minVar1, maxVar1, minVar2, maxVar2, diff_arr, gtFS);
+  launch_gpu_kernel<35, nMembers>(nPts, var1, var2, minVar1, maxVar1, minVar2, maxVar2, diff_arr, gtFS);
+  launch_gpu_kernel<40, nMembers>(nPts, var1, var2, minVar1, maxVar1, minVar2, maxVar2, diff_arr, gtFS);
   launch_gpu_kernel<45, nMembers>(nPts, var1, var2, minVar1, maxVar1, minVar2, maxVar2, diff_arr, gtFS);
   launch_gpu_kernel<50, nMembers>(nPts, var1, var2, minVar1, maxVar1, minVar2, maxVar2, diff_arr, gtFS);
   launch_gpu_kernel<55, nMembers>(nPts, var1, var2, minVar1, maxVar1, minVar2, maxVar2, diff_arr, gtFS);
